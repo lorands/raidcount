@@ -1,0 +1,12 @@
+= Raidcount Handbook
+:toc:
+:sectnums:
+
+Raidcount keeps the score of a kabaddi match from the command line,
+one raid at a time.
+
+include::chapters/install.adoc[leveloffset=+1]
+
+include::chapters/scoring.adoc[leveloffset=+1]
+
+include::chapters/commands.adoc[leveloffset=+1]

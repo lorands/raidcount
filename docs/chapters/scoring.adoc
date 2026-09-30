@@ -1,0 +1,15 @@
+= Scoring a raid
+
+A raid scores in three ways:
+
+Touch points:: One point for every defender the raider touches
+and who is then out.
+Bonus point:: One point when the raider crosses the bonus line.
+Tackle point:: One point to the defending team when they stop the raider.
+
+[source,shell]
+----
+raidcount raid --team A --touch 2 --bonus
+----
+
+Record every raid in the order it happened: the raid log is the match record.
