@@ -1,0 +1,150 @@
+# publish-markdown.yml — Render Markdown and publish to GoOwl.
+#
+# Copy this file to .github/workflows/ in your repository.
+#
+# Required secrets:
+#   GOOWL_API_KEY  — GoOwl API key (gow_...) with content:publish permission
+#
+# Required variables (Settings > Variables > Actions):
+#   GOOWL_URL      — GoOwl authoring API URL (e.g. https://goowl.example.com)
+#   GOOWL_BOOK_ID  — UUID of the book to publish into
+#   BOOK_LANG      — BCP 47 language code (e.g. en)
+#   SOURCE_FILE    — Path to the main .md file (e.g. docs/guide.md)
+#
+# Optional variables:
+#   CSS_FILE       — Path to a custom CSS file to embed in HTML output
+#   HTML_TEMPLATE  — Path to a custom pandoc HTML template
+
+name: Publish Markdown to GoOwl
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 1.0.0). Leave empty to derive from tag.'
+        required: false
+
+env:
+  GOOWL_URL: ${{ vars.GOOWL_URL }}
+  BOOK_ID: ${{ vars.GOOWL_BOOK_ID }}
+  BOOK_LANG: ${{ vars.BOOK_LANG || 'en' }}
+  SOURCE_FILE: ${{ vars.SOURCE_FILE || 'docs/guide.md' }}
+  HTML_TEMPLATE: ${{ vars.HTML_TEMPLATE }}
+  CSS_FILE: ${{ vars.CSS_FILE }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    container:
+      # Pinned by digest, not the floating `:latest` tag (SEC-REPORT-2026-08-31
+      # R2-L29): this job container runs alongside GOOWL_API_KEY. Digest
+      # resolved from Docker Hub's registry API on 2026-09-01, where it
+      # matches the numbered release tag :3.9.0.2-alpine byte-for-byte.
+      # Refresh: `crane digest pandoc/extra:latest` or
+      # `skopeo inspect docker://docker.io/pandoc/extra:latest`.
+      image: pandoc/extra@sha256:dfae5cf73a0e0ad40acf23d2d2c4adf5715e560aeea3324aa87e68faaa2e70c9 # :latest as of 2026-09-01 (== :3.9.0.2-alpine)
+
+    # actions/checkout is the only step that touches repository state, and it
+    # only needs to read. GOOWL_API_KEY (below) is a repo secret unrelated to
+    # GITHUB_TOKEN, and no step in this job writes back to the repository or
+    # calls the GitHub API — so the default token stays read-only even if a
+    # later step were compromised.
+    permissions:
+      contents: read
+
+    steps:
+      # Pinned by commit SHA, not the floating `v7` tag (SEC-REPORT-2026-09-02
+      # R3-L11): this job runs alongside GOOWL_API_KEY (below), so a
+      # registry-side repoint of `@v7` would be code execution next to the
+      # secret. Same pin as customer-build-ecr.yml:81. Re-pin a new tag with
+      # `gh api repos/actions/checkout/git/refs/tags/<tag>`.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # `${{ }}` expressions are never interpolated directly into `run:`
+      # below — GitHub Actions substitutes them TEXTUALLY before the shell
+      # ever sees the script, so a `workflow_dispatch` input containing
+      # `$(...)` would otherwise execute as a shell command (SEC-REPORT-
+      # 2026-08-31 R2-H9). Every value crosses into the script via `env:`
+      # instead, which sets a real environment variable rather than
+      # rewriting the script text.
+      - name: Determine version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$INPUT_VERSION" ]; then
+            VALUE="$INPUT_VERSION"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VALUE="${GITHUB_REF#refs/tags/v}"
+          else
+            echo "::error::No version specified and not triggered by a version tag"
+            exit 1
+          fi
+
+          if ! [[ "$VALUE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version '$VALUE' is not a valid semantic version (expected X.Y.Z)"
+            exit 1
+          fi
+
+          echo "value=$VALUE" >> "$GITHUB_OUTPUT"
+
+      - name: Render HTML
+        run: |
+          mkdir -p /tmp/rendered
+          PANDOC_ARGS=(
+            -f markdown
+            -t html5
+            --standalone
+            --embed-resources
+            -o /tmp/rendered/output.html
+          )
+
+          if [ -n "$HTML_TEMPLATE" ]; then
+            PANDOC_ARGS+=(--template "$HTML_TEMPLATE")
+          fi
+
+          if [ -n "$CSS_FILE" ]; then
+            PANDOC_ARGS+=(--css "$CSS_FILE")
+          fi
+
+          PANDOC_ARGS+=("$SOURCE_FILE")
+          pandoc "${PANDOC_ARGS[@]}"
+
+      - name: Render PDF
+        run: |
+          pandoc \
+            -f markdown \
+            --pdf-engine=xelatex \
+            -o /tmp/rendered/output.pdf \
+            "$SOURCE_FILE"
+
+      - name: Install curl
+        run: apk add --no-cache curl jq 2>/dev/null || apt-get update && apt-get install -y curl jq
+
+      - name: Publish to GoOwl
+        env:
+          GOOWL_API_KEY: ${{ secrets.GOOWL_API_KEY }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          CURL_ARGS=(
+            -sf -X POST
+            "${GOOWL_URL}/api/books/${BOOK_ID}/publish-rendered"
+            -H "Authorization: Bearer ${GOOWL_API_KEY}"
+            -F "version=${VERSION}"
+            -F "lang=${BOOK_LANG}"
+            -F "commit_sha=${GITHUB_SHA}"
+            -F "html=@/tmp/rendered/output.html"
+          )
+
+          if [ -f /tmp/rendered/output.pdf ]; then
+            CURL_ARGS+=(-F "pdf=@/tmp/rendered/output.pdf")
+          fi
+
+          RESPONSE=$(curl "${CURL_ARGS[@]}")
+          echo "Published successfully:"
+          echo "$RESPONSE" | jq . 2>/dev/null || echo "$RESPONSE"
