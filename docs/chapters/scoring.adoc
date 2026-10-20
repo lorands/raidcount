@@ -4,7 +4,7 @@ A raid scores in three ways:
 
 Touch points:: One point for every defender the raider touches
 and who is then out.
-Bonus point:: One point when the raider crosses the bonus line.
+Bonus point:: One point when the raider crosses the bonus line with at least six defenders on court.
 Tackle point:: One point to the defending team when they stop the raider.
 
 [source,shell]
