@@ -15,6 +15,7 @@ def main() -> None:
     raid.add_argument("--touch", type=int, default=0, help="defenders touched")
     raid.add_argument("--bonus", action="store_true", help="raider crossed the bonus line")
     raid.add_argument("--tackled", action="store_true", help="raider was tackled")
+    sub.add_parser("undo", help="take back the last raid")
     sub.add_parser("score", help="show the score")
     args = p.parse_args()
 
@@ -24,6 +25,10 @@ def main() -> None:
     m = Match.load()
     if args.cmd == "raid":
         m.raid(args.team, args.touch, args.bonus, args.tackled)
+        m.save()
+    elif args.cmd == "undo":
+        if not m.undo():
+            print("nothing to undo")
         m.save()
     print(f"{m.team_a} {m.points['A']} : {m.points['B']} {m.team_b}")
 

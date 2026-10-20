@@ -23,6 +23,17 @@ class Match:
         self.raids.append({"team": team, "touch": touch, "bonus": bonus, "tackled": tackled})
         return gained
 
+    def undo(self) -> bool:
+        """Take back the last raid: remove its points from both sides.
+        Returns False when no raid has been scored yet."""
+        if not self.raids:
+            return False
+        r = self.raids.pop()
+        self.points[r["team"]] -= r["touch"] + (1 if r["bonus"] else 0)
+        if r["tackled"]:
+            self.points["B" if r["team"] == "A" else "A"] -= 1
+        return True
+
     def save(self) -> None:
         STATE.write_text(json.dumps(asdict(self), indent=2))
 
