@@ -1,0 +1,3 @@
+Readers are match officials and team scorers at club kabaddi matches, not programmers.
+Explain each command with a short example from a real match.
+Use American spelling and keep sentences short.

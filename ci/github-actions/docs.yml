@@ -1,0 +1,30 @@
+# Draft the user manual from the source on every version tag (goowl-docgen).
+# Kept outside .github/workflows/ so it does not run here; copy it there to use it.
+name: Draft docs with GoOwl
+on:
+  push:
+    tags: ['v*']
+jobs:
+  docgen:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write          # AWS login for Bedrock via OIDC
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history: the run diffs since the last one
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.BEDROCK_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Draft the user manual
+        env:
+          GOOWL_API_URL: ${{ vars.GOOWL_URL }}
+          GOOWL_API_KEY: ${{ secrets.GOOWL_DOCGEN_KEY }}
+          PROJECT_ID: ${{ vars.GOOWL_PROJECT_ID }}
+          DOC_TYPE: user_manual
+          SOURCE_DIR: ${{ github.workspace }}
+          LLM_PROVIDER: bedrock
+          LLM_MODEL: us.anthropic.claude-sonnet-5
+        run: goowl-docgen run   # built from the GoOwl source, cmd/docgen

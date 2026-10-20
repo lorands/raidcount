@@ -10,7 +10,9 @@ Docs: `docs/handbook.adoc` (the handbook) and `docs/quickstart.md` (the quick st
 
 This is a sample project for GoOwl's docs-as-code demo video. `ci/github-actions/publish-markdown.yml`
 is GoOwl's GitHub Actions example (`docs/ci-cd-examples/github-actions/`).
-It is kept outside `.github/workflows/` so it does not run here; copy it there
-to use it.
+`ci/github-actions/docs.yml` drafts the user manual from the source with `goowl-docgen`
+on every version tag; `.goowl/docgen.txt` tells the model who it writes for.
+Both workflows are kept outside `.github/workflows/` so they do not run here; copy
+them there to use them.
 
 Licence: MIT (see `LICENSE`).
